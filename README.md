@@ -1,0 +1,1 @@
+# klarixa-spatial-inspector-by_F1725
