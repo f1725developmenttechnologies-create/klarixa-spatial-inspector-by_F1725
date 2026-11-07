@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klarixa Inspector - Modo XR</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #xr-ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 9999;
+            pointer-events: none;
+        }
+        #xr-ui > * { pointer-events: auto; }
+        .xr-header {
+            background: rgba(0, 10, 20, 0.95);
+            border-bottom: 1px solid #00ffff;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .xr-title {
+            color: #ffffff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        .xr-subtitle {
+            color: #00ffff;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+        .xr-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .xr-btn {
+            background: transparent;
+            border: 1px solid #00ffff;
+            color: #00ffff;
+            padding: 8px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .xr-btn:hover, .xr-btn.active {
+            background: #00ffff;
+            color: #000;
+        }
+        .xr-btn.danger {
+            border-color: #ff4444;
+            color: #ff4444;
+        }
+        .xr-btn.danger:hover {
+            background: #ff4444;
+            color: #fff;
+        }
+        .xr-timer {
+            color: #00ffff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        #xr-log {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            max-height: 200px;
+            background: rgba(0, 10, 20, 0.95);
+            border-top: 1px solid #00ffff;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+        }
+        #xr-log h4 {
+            color: #00ffff;
+            margin: 0 0 10px 0;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 4px 0;
+            color: #88ff88;
+        }
+        .log-entry.critical { color: #ff4444; }
+        .log-entry.medium { color: #ffaa00; }
+        .log-entry.low { color: #ffff00; }
+        .log-entry.ptt { color: #00ffff; }
+        #crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            width: 30px;
+            height: 30px;
+            margin: -15px 0 0 -15px;
+            border: 2px solid rgba(255, 255, 0, 0.8);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9998;
+        }
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 6px;
+            height: 6px;
+            margin: -3px 0 0 -3px;
+            background: #ffff00;
+            border-radius: 50%;
+        }
+        #instructions {
+            position: fixed;
+            bottom: 220px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            z-index: 9997;
+        }
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff0000;
+            color: #ff0000;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            text-align: center;
+            z-index: 10000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="xr-ui">
+        <div class="xr-header">
+            <div>
+                <div class="xr-title">KLARIXA · INSPECTOR</div>
+                <div class="xr-subtitle">MODO ESCRITORIO · RATÓN = MIRADA</div>
+            </div>
+            <div class="xr-controls">
+                <div class="xr-timer" id="mission-timer">T+00:00</div>
+                <button class="xr-btn danger" onclick="resetMission()">REINICIAR</button>
+                <button class="xr-btn" id="btn-vr" onclick="startVR()">VR</button>
+                <button class="xr-btn" id="btn-mr" onclick="startMR()">MR</button>
+                <button class="xr-btn" onclick="exitXR()">SALIR</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="instructions">CLIC = MARCAR HAZARD · MANTÉN PRESIONADO PARA GAZE</div>
+
+    <div id="xr-log">
+        <h4>BITÁCORA EN VIVO</h4>
+        <div id="log-entries"></div>
+    </div>
+
+    <div class="error-message" id="error-message">
+        <div>THE SPECIFIED SESSION CONFIGURATION IS NOT SUPPORTED</div>
+        <div style="margin-top: 10px; font-size: 12px;">Usando modo escritorio</div>
+    </div>
+
+    <a-scene 
+        background="color: #050510" 
+        fog="type: linear; color: #050510; near: 2; far: 30"
+        renderer="antialias: true; colorManagement: true">
+        
+        <a-light type="ambient" color="#404060" intensity="0.5"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="1.2" position="5 10 5" cast-shadow="true"></a-light>
+        <a-light type="point" color="#00ffff" intensity="0.8" position="-5 5 -5"></a-light>
+        <a-light type="point" color="#ff00ff" intensity="0.5" position="5 5 -10"></a-light>
+
+        <a-plane position="0 0 0" rotation="-90 0 0" width="50" height="50" color="#0a0a15" material="roughness: 0.9"></a-plane>
+
+        <!-- Estructuras industriales -->
+        <a-box id="tower1" position="-5 3 -8" width="2" height="6" depth="2" color="#4a90e2" material="metalness: 0.7; roughness: 0.3" class="clickable" data-name="Torre de proceso"></a-box>
+        <a-box id="tower2" position="5 3 -10" width="2" height="6" depth="2" color="#4a90e2" material="metalness: 0.7; roughness: 0.3" class="clickable" data-name="Torre de proceso B"></a-box>
+        <a-cylinder id="tank1" position="-8 1.5 -5" radius="1.5" height="3" color="#e24a4a" material="metalness: 0.8; roughness: 0.2" class="clickable" data-name="Tanque A"></a-cylinder>
+        <a-cylinder id="tank2" position="8 1.5 -6" radius="1.5" height="3" color="#e24a4a" material="metalness: 0.8; roughness: 0.2" class="clickable" data-name="Tanque B"></a-cylinder>
+        <a-sphere id="reactor" position="0 2.5 -12" radius="2" color="#50e3c2" material="metalness: 0.6; roughness: 0.4" class="clickable" data-name="Reactor principal"></a-sphere>
+
+        <!-- Tuberías -->
+        <a-cylinder position="-10 1 -3" radius="0.3" height="10" rotation="0 0 90" color="#666666" material="metalness: 0.9"></a-cylinder>
+        <a-cylinder position="10 1 -4" radius="0.3" height="12" rotation="0 0 90" color="#666666" material="metalness: 0.9"></a-cylinder>
+        <a-cylinder position="0 1 -15" radius="0.3" height="8" rotation="90 0 0" color="#666666" material="metalness: 0.9"></a-cylinder>
+
+        <!-- Drones del enjambre -->
+        <a-entity id="drone-alpha1" position="-3 4 -6" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #00ffff; emissive: #004444" animation="property: position; to: -3 4.5 -6; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="drone-alpha2" position="3 4 -6" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #00ffff; emissive: #004444" animation="property: position; to: 3 4.5 -6; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="drone-beta1" position="-6 4 -8" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #00ff00; emissive: #004400" animation="property: position; to: -6 4.5 -8; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="drone-beta2" position="6 4 -8" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #00ff00; emissive: #004400" animation="property: position; to: 6 4.5 -8; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="drone-gamma1" position="-4 4 -10" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #ff00ff; emissive: #440044" animation="property: position; to: -4 4.5 -10; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="drone-gamma2" position="4 4 -10" geometry="primitive: cone; radiusBottom: 0.3; height: 0.6" material="color: #ff00ff; emissive: #440044" animation="property: position; to: 4 4.5 -10; dur: 2000; loop: true; dir: alternate"></a-entity>
+        <a-entity id="satellite" position="0 10 -8" geometry="primitive: octahedron; radius: 0.5" material="color: #00ff00; emissive: #004400" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true; easing: linear"></a-entity>
+
+        <!-- Cámara -->
+        <a-entity camera look-controls wasd-controls="acceleration: 100" position="0 1.6 3">
+            <a-cursor color="#ffff00" raycaster="objects: .clickable" scale="0.5 0.5 0.5"></a-cursor>
+        </a-entity>
+    </a-scene>
+
+    <script src="app.js"></script>
+    <script>
+        // Inicialización del demo XR
+        document.addEventListener('DOMContentLoaded', () => {
+            initXRDemo();
+        });
+    </script>
+</body>
+</html>
